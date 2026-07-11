@@ -223,6 +223,10 @@
     ⏳ Sua empresa está <strong>aguardando verificação</strong>. Após aprovação suas vagas aparecem no feed.
   </div>
 
+  <div id="postVagaBar" style="display:none;margin-bottom:20px">
+    <button class="btn-register" onclick="openPostVaga()">+ Publicar nova vaga</button>
+  </div>
+
   <div class="filter-row">
     <div class="cats">
       <button class="cat-btn active" onclick="setTipo(this,'')">Todas</button>
@@ -337,55 +341,112 @@
   </div>
 </div>
 
+<!-- MODAL: NOVA VAGA (empresa verificada) -->
+<div class="modal-overlay" id="postVagaModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('postVagaModal')">✕</button>
+    <div style="font-size:22px;font-weight:800;margin-bottom:6px">Publicar vaga</div>
+    <div class="alert" id="postVagaAlert"></div>
+    <div class="form-row"><label class="form-label">Título *</label><input class="form-input" id="pvTitulo" placeholder="Ex: Desenvolvedor Frontend Pleno"></div>
+    <div class="form-row"><label class="form-label">Descrição *</label><textarea class="form-textarea" id="pvDescricao" placeholder="O que a vaga envolve..."></textarea></div>
+    <div class="form-2">
+      <div class="form-row" style="margin:0"><label class="form-label">Tipo</label><select class="form-select" id="pvTipo"><option>CLT</option><option>Freela</option><option>Estágio</option><option>Parceria</option><option>Mentoria</option></select></div>
+      <div class="form-row" style="margin:0"><label class="form-label">Modalidade</label><select class="form-select" id="pvModalidade"><option>Remoto</option><option>Presencial</option><option>Híbrido</option></select></div>
+    </div>
+    <div class="form-2">
+      <div class="form-row" style="margin:0"><label class="form-label">Cidade</label><input class="form-input" id="pvCidade"></div>
+      <div class="form-row" style="margin:0"><label class="form-label">Estado</label><input class="form-input" id="pvEstado"></div>
+    </div>
+    <div class="form-row"><label class="form-label">Setor</label><input class="form-input" id="pvSetor" placeholder="Tecnologia"></div>
+    <div class="form-row"><label class="form-label">Salário</label><input class="form-input" id="pvSalario" placeholder="R$ 3.000 ou A combinar"></div>
+    <div class="form-row"><label class="form-label">Cursos necessários (vírgula)</label><input class="form-input" id="pvCursos" placeholder="Libras básico..."></div>
+    <div class="form-row chip-toggle" style="justify-content:flex-start;gap:10px"><input type="checkbox" id="pvCotaPcd"> <label for="pvCotaPcd">Vaga com cota PCD</label></div>
+    <button class="modal-apply" onclick="submitVaga()">Publicar →</button>
+  </div>
+</div>
+
 <script>
 // =====================================================
 // CONFIG
 // =====================================================
-const SB_URL = 'https://ymuwmxdtyyizofargqbc.supabase.co';
-const SB_KEY = 'sb_publishable_TBBNniRZ-7GywxssdmXP6Q_E2kJtdtZ';
-const LOCAL_SERVER = 'http://localhost:8765';
+const SB_URL = 'https://lnupezzcozlccigqzfsw.supabase.co';
+const SB_KEY = 'sb_publishable_Ea_-ThVjH3hUet-W4Z72PQ_OA8Nn6G9';
 
-async function sbInsert(table, data) {
-  try {
-    await fetch(`${SB_URL}/rest/v1/${table}`, {
-      method: 'POST',
-      headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-      body: JSON.stringify(data)
-    });
-  } catch (e) {}
+// Chamada autenticada no PostgREST — usa o access_token da sessão quando
+// logado, senão cai pra chave anon (RLS decide o que é permitido).
+async function sbRest(path, opts = {}) {
+  return fetch(`${SB_URL}/rest/v1/${path}`, {
+    ...opts,
+    headers: {
+      'apikey': SB_KEY,
+      'Authorization': `Bearer ${currentUser?.access_token || SB_KEY}`,
+      'Content-Type': 'application/json',
+      ...(opts.headers || {})
+    }
+  });
+}
+
+// Chamada no GoTrue (auth) do Supabase.
+async function sbAuth(path, body) {
+  const r = await fetch(`${SB_URL}/auth/v1/${path}`, {
+    method: 'POST',
+    headers: { 'apikey': SB_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error_description || d.msg || d.error || 'Erro de autenticação.');
+  return d;
 }
 
 // =====================================================
 // STATE
 // =====================================================
 let vagas = [], tipoAtivo = '', cotaPcdOnly = false;
-let currentUser = null;
+let currentUser = null; // { access_token, refresh_token, id, email, name, empresa }
+let minhasCandidaturas = new Set();
 
 const TIPO_LABEL = { CLT:'CLT', Freela:'Freela', 'Estágio':'Estágio', Parceria:'Parceria', Mentoria:'Mentoria' };
 const MODALIDADE_ICON = { Remoto:'🌐', Presencial:'📍', 'Híbrido':'🔀' };
 
 // =====================================================
-// AUTH — hash com Web Crypto, sessão em localStorage
+// AUTH — Supabase Auth (GoTrue) real, sessão em localStorage
 // =====================================================
-async function hashPw(pw) {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pw));
-  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
-}
 function loadSession() { try { currentUser = JSON.parse(localStorage.getItem('zion_session')); } catch(e) { currentUser = null; } }
 function saveSession(user) { currentUser = user; localStorage.setItem('zion_session', JSON.stringify(user)); }
-function getUsers() { try { return JSON.parse(localStorage.getItem('zion_users') || '[]'); } catch(e) { return []; } }
-function saveUsers(arr) { localStorage.setItem('zion_users', JSON.stringify(arr)); }
+function logout() { localStorage.removeItem('zion_session'); currentUser = null; minhasCandidaturas = new Set(); updateAuthUI(); render(); }
+
+async function fetchMinhaEmpresa() {
+  if (!currentUser) return null;
+  try {
+    const r = await sbRest(`empresas?auth_user_id=eq.${currentUser.id}&select=*`);
+    if (!r.ok) return null;
+    const rows = await r.json();
+    return rows[0] || null;
+  } catch (e) { return null; }
+}
+
+async function loadMinhasCandidaturas() {
+  if (!currentUser) { minhasCandidaturas = new Set(); return; }
+  try {
+    const r = await sbRest(`candidaturas?user_id=eq.${currentUser.id}&select=vaga_id`);
+    if (r.ok) minhasCandidaturas = new Set((await r.json()).map(x => x.vaga_id));
+  } catch (e) {}
+}
 
 async function doLogin() {
   const email = document.getElementById('lEmail').value.trim().toLowerCase();
   const pw    = document.getElementById('lPass').value;
   if (!email || !pw) return showAlert('authAlert','error','Preencha email e senha.');
-  const hash  = await hashPw(pw);
-  const user  = getUsers().find(u => u.email === email && u.hash === hash);
-  if (!user) return showAlert('authAlert','error','Email ou senha incorretos.');
-  saveSession(user);
-  closeModal('authModal');
-  updateAuthUI(); render();
+  try {
+    const d = await sbAuth('token?grant_type=password', { email, password: pw });
+    currentUser = { access_token: d.access_token, refresh_token: d.refresh_token, id: d.user.id, email: d.user.email, name: d.user.user_metadata?.name || d.user.email.split('@')[0] };
+    currentUser.empresa = await fetchMinhaEmpresa();
+    saveSession(currentUser);
+    await loadMinhasCandidaturas();
+    closeModal('authModal'); updateAuthUI(); render();
+  } catch (e) {
+    showAlert('authAlert','error', /invalid/i.test(e.message) ? 'Email ou senha incorretos.' : e.message);
+  }
 }
 
 async function doRegister() {
@@ -394,12 +455,16 @@ async function doRegister() {
   const pw    = document.getElementById('rPass').value;
   if (!name || !email || !pw) return showAlert('authAlert','error','Preencha todos os campos.');
   if (pw.length < 6) return showAlert('authAlert','error','Senha deve ter pelo menos 6 caracteres.');
-  const users = getUsers();
-  if (users.find(u => u.email === email)) return showAlert('authAlert','error','Email já cadastrado neste dispositivo.');
-  const hash = await hashPw(pw);
-  const user = { name, email, hash, type: 'user', createdAt: new Date().toISOString() };
-  users.push(user); saveUsers(users); saveSession(user);
-  closeModal('authModal'); updateAuthUI(); render();
+  try {
+    const d = await sbAuth('signup', { email, password: pw, data: { name } });
+    if (!d.access_token) {
+      showAlert('authAlert','success','Conta criada! Confirme seu email antes de entrar.');
+      return;
+    }
+    currentUser = { access_token: d.access_token, refresh_token: d.refresh_token, id: d.user.id, email: d.user.email, name, empresa: null };
+    saveSession(currentUser);
+    closeModal('authModal'); updateAuthUI(); render();
+  } catch (e) { showAlert('authAlert','error', e.message); }
 }
 
 async function autofillCnpj() {
@@ -428,42 +493,47 @@ async function doEmpresaRegister() {
   const estado   = document.getElementById('eEstado').value.trim();
   if (!nome || !cnpj || !email || !tel || !senha || !endereco || !cidade || !estado)
     return showAlert('empresaAlert','error','Preencha todos os campos obrigatórios.');
-  const users = getUsers();
-  if (users.find(u => u.email === email)) return showAlert('empresaAlert','error','Email já cadastrado.');
-  const hash = await hashPw(senha);
-  const user = { name: nome, email, hash, type: 'empresa', status: 'pendente', cnpj, tel, area, endereco, cidade, estado, createdAt: new Date().toISOString() };
-  users.push(user); saveUsers(users); saveSession(user);
-
-  const empresaData = { nome, cnpj, email, tel, area, endereco, cidade, estado };
-  sbInsert('empresas', { name: nome, cnpj, email, tel, area, endereco, cidade, estado, status: 'pendente' });
-  fetch(`${LOCAL_SERVER}/register`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(empresaData)
-  }).catch(() => {});
-
-  closeModal('empresaModal'); updateAuthUI(); render();
-  document.getElementById('doneModal').classList.add('open');
+  try {
+    const d = await sbAuth('signup', { email, password: senha, data: { name: nome } });
+    if (!d.access_token) {
+      showAlert('empresaAlert','success','Conta criada! Confirme seu email e depois faça login pra continuar.');
+      return;
+    }
+    currentUser = { access_token: d.access_token, refresh_token: d.refresh_token, id: d.user.id, email: d.user.email, name: nome, empresa: null };
+    const r = await sbRest('empresas', {
+      method: 'POST',
+      headers: { 'Prefer': 'return=representation' },
+      body: JSON.stringify({ auth_user_id: d.user.id, nome, cnpj, email, tel, area, endereco, cidade, estado })
+    });
+    if (r.ok) currentUser.empresa = (await r.json())[0];
+    saveSession(currentUser);
+    closeModal('empresaModal'); updateAuthUI(); render();
+    document.getElementById('doneModal').classList.add('open');
+  } catch (e) { showAlert('empresaAlert','error', e.message); }
 }
-
-function logout() { localStorage.removeItem('zion_session'); currentUser = null; updateAuthUI(); render(); }
 
 function updateAuthUI() {
   const hr = document.getElementById('headerRight');
   const banner = document.getElementById('loginBanner');
   const pending = document.getElementById('pendingNotice');
+  const postVagaBar = document.getElementById('postVagaBar');
   if (!currentUser) {
     hr.innerHTML = `<button class="btn-login" onclick="openAuth('login')">Entrar</button>
                     <button class="btn-register" onclick="openAuth('register')"><span>Criar conta</span></button>`;
-    banner.style.display = ''; pending.classList.remove('show');
+    banner.style.display = ''; pending.classList.remove('show'); postVagaBar.style.display = 'none';
     return;
   }
   const initials = currentUser.name.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
-  const typeLabel = currentUser.type === 'empresa'
-    ? `<span class="user-type-badge empresa">${currentUser.status === 'pendente' ? '⏳ Pendente' : '✓ Empresa'}</span>`
+  const isEmpresa = !!currentUser.empresa;
+  const verificado = currentUser.empresa?.verificado;
+  const typeLabel = isEmpresa
+    ? `<span class="user-type-badge empresa">${verificado ? '✓ Empresa' : '⏳ Pendente'}</span>`
     : `<span class="user-type-badge">✓ Candidato</span>`;
   hr.innerHTML = `<div class="user-pill"><div class="user-avatar">${initials}</div><span class="user-name">${currentUser.name.split(' ')[0]}</span>${typeLabel}</div>
   <button class="btn-logout" onclick="logout()">Sair</button>`;
   banner.style.display = 'none';
-  pending.classList.toggle('show', currentUser.type === 'empresa' && currentUser.status === 'pendente');
+  pending.classList.toggle('show', isEmpresa && !verificado);
+  postVagaBar.style.display = (isEmpresa && verificado) ? '' : 'none';
 }
 
 // =====================================================
@@ -485,13 +555,51 @@ function showAlert(id, type, msg) {
 }
 
 // =====================================================
-// CANDIDATURAS (stub local — Fase 2 troca por Supabase)
+// CANDIDATURAS
 // =====================================================
-function getCandidaturas() { try { return JSON.parse(localStorage.getItem('zion_candidaturas') || '[]'); } catch(e) { return []; } }
-function jaCandidatou(vagaId) { return getCandidaturas().includes(vagaId); }
-function candidatar(vagaId) {
-  const cs = getCandidaturas();
-  if (!cs.includes(vagaId)) { cs.push(vagaId); localStorage.setItem('zion_candidaturas', JSON.stringify(cs)); }
+function jaCandidatou(vagaId) { return minhasCandidaturas.has(vagaId); }
+async function candidatar(vagaId) {
+  try {
+    const r = await sbRest('candidaturas', {
+      method: 'POST',
+      body: JSON.stringify({ vaga_id: vagaId, user_id: currentUser.id, nome: currentUser.name, email: currentUser.email })
+    });
+    if (r.ok || r.status === 409) { minhasCandidaturas.add(vagaId); return true; }
+    return false;
+  } catch (e) { return false; }
+}
+
+// =====================================================
+// PUBLICAR VAGA (empresa verificada)
+// =====================================================
+function openPostVaga() { document.getElementById('postVagaAlert').className = 'alert'; document.getElementById('postVagaModal').classList.add('open'); }
+
+async function submitVaga() {
+  const titulo = document.getElementById('pvTitulo').value.trim();
+  const descricao = document.getElementById('pvDescricao').value.trim();
+  if (!titulo || !descricao) return showAlert('postVagaAlert','error','Preencha título e descrição.');
+  const payload = {
+    empresa_id: currentUser.empresa.id,
+    empresa_nome: currentUser.empresa.nome,
+    empresa_logo_url: currentUser.empresa.logo_url || '',
+    empresa_verificado: true,
+    titulo, descricao,
+    tipo: document.getElementById('pvTipo').value,
+    modalidade: document.getElementById('pvModalidade').value,
+    setor: document.getElementById('pvSetor').value,
+    cidade: document.getElementById('pvCidade').value,
+    estado: document.getElementById('pvEstado').value,
+    salario: document.getElementById('pvSalario').value || 'A combinar',
+    cota_pcd: document.getElementById('pvCotaPcd').checked,
+    cursos_necessarios: (document.getElementById('pvCursos').value || '').split(',').map(s => s.trim()).filter(Boolean),
+    origem: 'empresa'
+  };
+  const r = await sbRest('vagas', { method: 'POST', body: JSON.stringify(payload) });
+  if (!r.ok) return showAlert('postVagaAlert','error','Erro ao publicar. Sua empresa precisa estar verificada.');
+  closeModal('postVagaModal');
+  ['pvTitulo','pvDescricao','pvSetor','pvCidade','pvEstado','pvSalario','pvCursos'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('pvCotaPcd').checked = false;
+  loadVagas();
 }
 
 // =====================================================
@@ -515,7 +623,7 @@ function render() {
   if (s) list = list.filter(v =>
     (v.titulo||'').toLowerCase().includes(s) ||
     (v.descricao||'').toLowerCase().includes(s) ||
-    (v.empresa?.nome||'').toLowerCase().includes(s) ||
+    (v.empresa_nome||'').toLowerCase().includes(s) ||
     (v.tags||[]).some(t => t.toLowerCase().includes(s))
   );
   if (tipoAtivo) list = list.filter(v => v.tipo === tipoAtivo);
@@ -525,7 +633,7 @@ function render() {
   document.getElementById('sVagas').textContent = list.length;
   document.getElementById('countLbl').textContent = list.length;
   document.getElementById('sPcd').textContent = vagas.filter(v => v.cota_pcd).length;
-  document.getElementById('sEmpresas').textContent = new Set(vagas.filter(v=>v.origem==='empresa').map(v=>v.empresa?.nome)).size;
+  document.getElementById('sEmpresas').textContent = new Set(vagas.filter(v=>v.origem==='empresa').map(v=>v.empresa_nome)).size;
 
   const g = document.getElementById('grid');
   if (!list.length) {
@@ -535,16 +643,16 @@ function render() {
   }
 
   g.innerHTML = list.map((v,i) => {
-    const initials = (v.empresa?.nome || '—')[0].toUpperCase();
+    const initials = (v.empresa_nome || '—')[0].toUpperCase();
     const tagTipo = v.tipo ? `<span class="tag tag-tipo-${v.tipo}">${TIPO_LABEL[v.tipo]||v.tipo}</span>` : '';
     const tagModal = v.modalidade ? `<span class="tag tag-modalidade">${MODALIDADE_ICON[v.modalidade]||''} ${v.modalidade}</span>` : '';
     const tagFonte = v.origem === 'scraper' ? `<span class="tag tag-fonte">via ${v.fonte}</span>` : '';
     return `<div class="job-card" onclick="openDetail('${v.id}')" style="animation-delay:${i*.03}s">
       ${v.cota_pcd ? '<span class="pcd-badge">♿ Cota PCD</span>' : ''}
       <div class="card-top">
-        ${v.empresa?.logo_url ? `<img class="employer-avatar" src="${v.empresa.logo_url}" alt="">` : `<div class="employer-avatar">${initials}</div>`}
+        ${v.empresa_logo_url ? `<img class="employer-avatar" src="${v.empresa_logo_url}" alt="">` : `<div class="employer-avatar">${initials}</div>`}
         <div style="overflow:hidden">
-          <div class="job-company">${v.empresa?.nome || '—'} ${v.empresa?.verificado ? '<span class="verified-badge">✓</span>' : ''}</div>
+          <div class="job-company">${v.empresa_nome || '—'} ${v.empresa_verificado ? '<span class="verified-badge">✓</span>' : ''}</div>
         </div>
       </div>
       <div class="job-title">${v.titulo}</div>
@@ -580,7 +688,7 @@ function openDetail(id) {
   const tagPcd = v.cota_pcd ? `<span class="tag" style="background:rgba(234,179,8,.12);color:var(--accent);border-color:rgba(234,179,8,.35)">♿ Cota PCD</span>` : '';
   document.getElementById('mBadges').innerHTML = `${tagTipo}${tagModal}${tagPcd}`;
   document.getElementById('mTitle').textContent = v.titulo;
-  document.getElementById('mCo').textContent = `${v.empresa?.nome || '—'} · ${[v.cidade, v.estado].filter(Boolean).join(', ') || 'Local não informado'} · publicada ${timeAgo(v.criado_em)}`;
+  document.getElementById('mCo').textContent = `${v.empresa_nome || '—'} · ${[v.cidade, v.estado].filter(Boolean).join(', ') || 'Local não informado'} · publicada ${timeAgo(v.criado_em)}`;
   document.getElementById('mDesc').textContent = v.descricao || 'Sem descrição.';
   document.getElementById('mPay').textContent = v.salario || 'A combinar';
 
@@ -604,7 +712,12 @@ function openDetail(id) {
   } else {
     btn.textContent = 'Candidatar-se →';
     btn.disabled = false;
-    btn.onclick = () => { candidatar(v.id); openDetail(v.id); };
+    btn.onclick = async () => {
+      btn.disabled = true; btn.textContent = 'Enviando...';
+      const ok = await candidatar(v.id);
+      if (ok) openDetail(v.id);
+      else { btn.disabled = false; btn.textContent = 'Candidatar-se →'; alert('Erro ao enviar candidatura, tente de novo.'); }
+    };
   }
   document.getElementById('detailModal').classList.add('open');
 }
@@ -617,15 +730,30 @@ document.querySelectorAll('.modal-overlay').forEach(el =>
 );
 
 // =====================================================
+// FEED
+// =====================================================
+async function loadVagas() {
+  try {
+    const r = await sbRest('vagas?select=*&order=criado_em.desc');
+    vagas = r.ok ? await r.json() : [];
+  } catch (e) { vagas = []; }
+  render();
+}
+
+// =====================================================
 // INIT
 // =====================================================
-loadSession();
-updateAuthUI();
-
-fetch('data/vagas.json?t=' + Date.now())
-  .then(r => r.ok ? r.json() : Promise.reject())
-  .then(data => { vagas = data.vagas || []; render(); })
-  .catch(() => { vagas = []; render(); });
+async function init() {
+  loadSession();
+  if (currentUser) {
+    currentUser.empresa = await fetchMinhaEmpresa();
+    saveSession(currentUser);
+    await loadMinhasCandidaturas();
+  }
+  updateAuthUI();
+  await loadVagas();
+}
+init();
 </script>
 </body>
 </html>

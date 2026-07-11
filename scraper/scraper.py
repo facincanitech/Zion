@@ -1,17 +1,17 @@
 """
 Zion Jobs Scraper — Multi-source, sem IA
 Busca vagas em RemoteOK, Remotive, Freelancer.com, Jooble e Adzuna.
-Filtra, pontua por relevância e publica em data/vagas.json (schema unificado
-de vaga, compartilhado com as vagas postadas por empresa).
+Filtra, pontua por relevância e faz upsert direto na tabela `vagas` do
+Supabase (schema unificado, compartilhado com as vagas postadas por empresa).
 
 Portado do GetFreelas (facincanitech/GetFreelas) — mesma lógica de busca e
-pontuação, só a normalização de saída muda pro schema unificado do Zion Jobs.
+pontuação, só a publicação final muda: em vez de gerar/commitar JSON, grava
+direto no Postgres do Supabase usando a service role key (bypassa RLS).
 """
 
 import json
 import re
 import hashlib
-import base64
 import sys
 import urllib.request
 import urllib.parse
@@ -30,9 +30,8 @@ CFG_FILE = BASE_DIR / "config.json"
 with open(CFG_FILE, encoding="utf-8") as f:
     CFG = json.load(f)
 
-GH_TOKEN  = CFG.get("github_token", "")
-GH_REPO   = CFG.get("github_repo", "")
-GH_BRANCH = CFG.get("github_branch", "main")
+SB_URL              = CFG.get("supabase_url", "")
+SB_SERVICE_ROLE_KEY = CFG.get("supabase_service_role_key", "")
 MAX_JOBS  = CFG.get("max_jobs", 80)
 SCORE_MIN = CFG.get("score_minimo", 3)
 
@@ -43,8 +42,6 @@ ADZUNA_KEY  = CFG.get("adzuna_app_key", "")
 
 BOOST = [w.lower() for w in CFG.get("palavras_boost", [])]
 BLOCK = [w.lower() for w in CFG.get("palavras_block", [])]
-
-VAGAS_PATH = "data/vagas.json"
 
 # ─────────────────────────────────────────
 # HELPERS
@@ -384,13 +381,13 @@ def fetch_freelancer():
         return []
 
 # ─────────────────────────────────────────
-# NORMALIZAÇÃO PRO SCHEMA UNIFICADO DE VAGA
+# NORMALIZAÇÃO PRO SCHEMA UNIFICADO DE VAGA (tabela `vagas` no Supabase)
 # ─────────────────────────────────────────
 def to_vaga(job):
     location = job.get("location") or ""
     cidade = "" if location.lower() in ("remoto", "global", "") else location
     return {
-        "id": f"scraper-{job['id']}",
+        "external_id": f"{job.get('source','scraper').lower()}-{job['id']}",
         "titulo": job["title"],
         "descricao": job["desc"],
         "tipo": "Freela",
@@ -405,51 +402,42 @@ def to_vaga(job):
         "origem": "scraper",
         "fonte": job.get("source", ""),
         "link_externo": job.get("contact", ""),
-        "empresa": {"nome": job.get("company", "—"), "logo_url": "", "verificado": False},
+        "empresa_id": None,
+        "empresa_nome": job.get("company", "—"),
+        "empresa_logo_url": "",
+        "empresa_verificado": False,
         "criado_em": job.get("criado_em") or datetime.now(timezone.utc).isoformat()
     }
 
 # ─────────────────────────────────────────
-# GITHUB PUSH
+# SUPABASE — upsert direto na tabela `vagas` (service role, ignora RLS)
 # ─────────────────────────────────────────
-def push_to_github(path, payload, message):
-    if not GH_TOKEN or GH_TOKEN == "SEU_TOKEN_AQUI":
-        print("⚠  Token GitHub não configurado — JSON salvo só localmente.")
-        return False
-    content = base64.b64encode(
-        json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
-    ).decode()
-    api     = f"https://api.github.com/repos/{GH_REPO}/contents/{path}"
+def _sb_request(method, path, body=None):
     headers = {
-        "Authorization": f"Bearer {GH_TOKEN}",
-        "Accept":        "application/vnd.github+json",
-        "Content-Type":  "application/json",
-        "User-Agent":    "ZionJobs-Scraper/1.0"
+        "apikey": SB_SERVICE_ROLE_KEY,
+        "Authorization": f"Bearer {SB_SERVICE_ROLE_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "return=minimal"
     }
-    sha = None
-    try:
-        req = urllib.request.Request(f"{api}?ref={GH_BRANCH}", headers=headers)
-        with urllib.request.urlopen(req, timeout=10) as r:
-            sha = json.loads(r.read()).get("sha")
-    except Exception:
-        pass
+    data = json.dumps(body).encode("utf-8") if body is not None else None
+    req = urllib.request.Request(f"{SB_URL}/rest/v1/{path}", data=data, headers=headers, method=method)
+    with urllib.request.urlopen(req, timeout=20) as r:
+        return r.read()
 
-    body = {
-        "message": message,
-        "content": content,
-        "branch":  GH_BRANCH,
-        **({"sha": sha} if sha else {})
-    }
-    req = urllib.request.Request(
-        api, data=json.dumps(body).encode(), headers=headers, method="PUT"
-    )
+def publish_vagas_supabase(vagas_raspadas):
+    if not SB_URL or not SB_SERVICE_ROLE_KEY or SB_SERVICE_ROLE_KEY == "SUA_SERVICE_ROLE_KEY_AQUI":
+        print("⚠  Supabase não configurado (supabase_url / supabase_service_role_key) — nada foi publicado.")
+        return False
     try:
-        with urllib.request.urlopen(req, timeout=15) as r:
-            r.read()
-        print(f"   ✓ github.com/{GH_REPO}/blob/{GH_BRANCH}/{path}")
+        # Remove as vagas raspadas antigas — as de empresa (origem=empresa) não são tocadas.
+        _sb_request("DELETE", "vagas?origem=eq.scraper")
+        # Insere as novas em lote.
+        if vagas_raspadas:
+            _sb_request("POST", "vagas", vagas_raspadas)
+        print(f"   ✓ {len(vagas_raspadas)} vagas raspadas publicadas em {SB_URL}")
         return True
     except Exception as e:
-        print(f"   ✗ Erro no push: {e}")
+        print(f"   ✗ Erro publicando no Supabase: {e}")
         return False
 
 # ─────────────────────────────────────────
@@ -497,35 +485,11 @@ def main():
     # 7. Normaliza pro schema unificado
     vagas_raspadas = [to_vaga(j) for j in final]
 
-    # 8. Carrega data/vagas.json existente e preserva vagas de empresa
-    out_file = BASE_DIR.parent / "data" / "vagas.json"
-    out_file.parent.mkdir(exist_ok=True)
-    vagas_empresa = []
-    if out_file.exists():
-        try:
-            with open(out_file, encoding="utf-8") as f:
-                existentes = json.load(f).get("vagas", [])
-            vagas_empresa = [v for v in existentes if v.get("origem") == "empresa"]
-        except Exception:
-            pass
+    # 8. Publica direto na tabela `vagas` do Supabase (substitui as raspadas antigas)
+    print("🚀 Publicando no Supabase...")
+    publish_vagas_supabase(vagas_raspadas)
 
-    todas = vagas_empresa + vagas_raspadas
-    output = {
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-        "total": len(todas),
-        "vagas": todas
-    }
-
-    # 9. Salva local
-    with open(out_file, "w", encoding="utf-8") as f:
-        json.dump(output, f, ensure_ascii=False, indent=2)
-    print(f"💾 Salvo em {out_file}")
-
-    # 10. Push GitHub
-    print("🚀 Enviando para GitHub...")
-    push_to_github(VAGAS_PATH, output, f"chore: atualiza vagas.json (scraper) — {datetime.now().strftime('%d/%m/%Y %H:%M')}")
-
-    print(f"\n🎉 Concluído — {len(vagas_raspadas)} vagas raspadas + {len(vagas_empresa)} de empresa\n")
+    print(f"\n🎉 Concluído — {len(vagas_raspadas)} vagas raspadas\n")
 
 if __name__ == "__main__":
     main()

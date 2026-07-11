@@ -1,5 +1,2 @@
-admin.html
-data/empresas_local.json
 scraper/config.json
-scraper/last_run.json
 scraper/__pycache__/
