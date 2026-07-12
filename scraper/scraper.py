@@ -1,8 +1,9 @@
 """
 Zion Jobs Scraper — Multi-source, sem IA
-Busca vagas em RemoteOK, Remotive, Freelancer.com, Jooble e Adzuna.
-Filtra, pontua por relevância e faz upsert direto na tabela `vagas` do
-Supabase (schema unificado, compartilhado com as vagas postadas por empresa).
+Busca vagas em RemoteOK, Remotive, We Work Remotely, Freelancer.com, Jooble
+e Adzuna. Filtra, pontua por relevância e faz upsert direto na tabela
+`vagas` do Supabase (schema unificado, compartilhado com as vagas postadas
+por empresa).
 
 Portado do GetFreelas (facincanitech/GetFreelas) — mesma lógica de busca e
 pontuação, só a publicação final muda: em vez de gerar/commitar JSON, grava
@@ -15,6 +16,8 @@ import hashlib
 import sys
 import urllib.request
 import urllib.parse
+import xml.etree.ElementTree as ET
+from email.utils import parsedate_to_datetime
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -104,7 +107,11 @@ def _parse_date(date_val):
     try:
         if isinstance(date_val, (int, float)):
             return datetime.fromtimestamp(date_val, tz=timezone.utc)
-        dt = datetime.fromisoformat(str(date_val).replace("Z", "+00:00"))
+        s = str(date_val)
+        try:
+            dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        except ValueError:
+            dt = parsedate_to_datetime(s)  # formato RFC 2822 (RSS)
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
         return dt
@@ -403,6 +410,43 @@ def fetch_freelancer():
         return []
 
 # ─────────────────────────────────────────
+# SOURCE 6 — We Work Remotely (grátis, sem auth, feed RSS)
+# ─────────────────────────────────────────
+def fetch_wwr():
+    print("🔍 We Work Remotely...")
+    try:
+        req = urllib.request.Request("https://weworkremotely.com/remote-jobs.rss", headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=15) as r:
+            root = ET.fromstring(r.read())
+        jobs = []
+        for item in root.iter("item"):
+            title_full = (item.findtext("title") or "").strip()
+            company, sep, title = title_full.partition(": ")
+            if not sep:
+                company, title = "—", title_full
+            link      = (item.findtext("link") or "").strip()
+            region    = (item.findtext("region") or "Remoto").strip()
+            category  = (item.findtext("category") or "").strip()
+            date_val  = (item.findtext("pubDate") or "").strip()
+            desc      = strip_html(item.findtext("description") or "")[:3000]
+            guid      = item.findtext("guid") or link
+            jobs.append({
+                "id": job_id("wwr", guid), "title": title.strip(), "company": company.strip() or "—",
+                "category": categorize([category], title, desc),
+                "desc": desc, "contact": link,
+                "pay": "A combinar", "payNum": 0,
+                "tags": [category] if category else [],
+                "location": "Remoto", "country": detect_country(region),
+                "urgency": urgency(date_val), "criado_em": iso_of(date_val),
+                "source": "WeWorkRemotely"
+            })
+        print(f"   ✓ {len(jobs)} vagas")
+        return jobs
+    except Exception as e:
+        print(f"   ✗ Erro: {e}")
+        return []
+
+# ─────────────────────────────────────────
 # NORMALIZAÇÃO PRO SCHEMA UNIFICADO DE VAGA (tabela `vagas` no Supabase)
 # ─────────────────────────────────────────
 def to_vaga(job):
@@ -478,6 +522,7 @@ def main():
     all_jobs = (
         fetch_remoteok()   +
         fetch_remotive()   +
+        fetch_wwr()        +
         fetch_freelancer() +
         fetch_jooble()     +
         fetch_adzuna()
