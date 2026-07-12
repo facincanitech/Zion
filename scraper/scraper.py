@@ -35,7 +35,7 @@ with open(CFG_FILE, encoding="utf-8") as f:
 
 SB_URL              = CFG.get("supabase_url", "")
 SB_SERVICE_ROLE_KEY = CFG.get("supabase_service_role_key", "")
-MAX_JOBS  = CFG.get("max_jobs", 80)
+MAX_JOBS  = CFG.get("max_jobs", 120)
 SCORE_MIN = CFG.get("score_minimo", 3)
 
 JOOBLE_KEY        = CFG.get("jooble_api_key", "")
@@ -510,6 +510,36 @@ def publish_vagas_supabase(vagas_raspadas):
         return False
 
 # ─────────────────────────────────────────
+# SELEÇÃO BALANCEADA — cota mínima de BR + round-robin entre fontes
+# ─────────────────────────────────────────
+def balanced_select(jobs, max_jobs, br_quota_ratio=0.35):
+    """jobs já vem ordenado por score desc. Garante uma cota de vagas BR e
+    intercala entre as fontes restantes pra nenhuma dominar o feed."""
+    br_jobs = [j for j in jobs if j.get("country") == "BR"]
+    br_quota = min(len(br_jobs), max(1, int(max_jobs * br_quota_ratio)))
+    selected = br_jobs[:br_quota]
+    selected_ids = {j["id"] for j in selected}
+
+    by_source = {}
+    for j in jobs:
+        if j["id"] in selected_ids:
+            continue
+        by_source.setdefault(j.get("source", "?"), []).append(j)
+
+    sources = list(by_source.keys())
+    idx = {s: 0 for s in sources}
+    while len(selected) < max_jobs and any(idx[s] < len(by_source[s]) for s in sources):
+        for s in sources:
+            if len(selected) >= max_jobs:
+                break
+            if idx[s] < len(by_source[s]):
+                selected.append(by_source[s][idx[s]])
+                idx[s] += 1
+
+    selected.sort(key=lambda x: -x["score_ia"])
+    return selected
+
+# ─────────────────────────────────────────
 # MAIN
 # ─────────────────────────────────────────
 def main():
@@ -548,8 +578,10 @@ def main():
     order = {"hot": 0, "new": 1, "normal": 2}
     filtered.sort(key=lambda x: (-x["score_ia"], order.get(x["urgency"], 2)))
 
-    # 6. Seleciona os melhores
-    final = [j for j in filtered if j["score_ia"] >= SCORE_MIN][:MAX_JOBS]
+    # 6. Seleciona de forma balanceada: garante uma cota de vagas BR e
+    #    intercala entre fontes pra nenhuma dominar o feed sozinha.
+    eligible = [j for j in filtered if j["score_ia"] >= SCORE_MIN]
+    final = balanced_select(eligible, MAX_JOBS)
     print(f"✅ {len(final)} vagas selecionadas (score ≥ {SCORE_MIN})\n")
 
     # 7. Normaliza pro schema unificado
