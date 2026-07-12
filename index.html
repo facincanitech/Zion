@@ -362,6 +362,15 @@
   </div>
 </div>
 
+<!-- MODAL: MINHAS CANDIDATURAS -->
+<div class="modal-overlay" id="candidaturasModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('candidaturasModal')">✕</button>
+    <div style="font-size:22px;font-weight:800;margin-bottom:16px">📋 Minhas candidaturas</div>
+    <div id="candidaturasList"></div>
+  </div>
+</div>
+
 <!-- MODAL: NOVA VAGA (empresa verificada) -->
 <div class="modal-overlay" id="postVagaModal">
   <div class="modal">
@@ -583,7 +592,9 @@ function updateAuthUI() {
   const typeLabel = isEmpresa
     ? `<span class="user-type-badge empresa">${verificado ? '✓ Empresa' : '⏳ Pendente'}</span>`
     : `<span class="user-type-badge">✓ Candidato</span>`;
+  const candidaturasBtn = !isEmpresa ? `<button class="btn-login" onclick="openMinhasCandidaturas()">📋 Candidaturas</button>` : '';
   hr.innerHTML = `<div class="user-pill"><div class="user-avatar">${initials}</div><span class="user-name">${currentUser.name.split(' ')[0]}</span>${typeLabel}</div>
+  ${candidaturasBtn}
   <button class="btn-logout" onclick="logout()">Sair</button>`;
   pending.classList.toggle('show', isEmpresa && !verificado);
   postVagaBar.style.display = (isEmpresa && verificado) ? '' : 'none';
@@ -620,6 +631,39 @@ async function candidatar(vagaId) {
     if (r.ok || r.status === 409) { minhasCandidaturas.add(vagaId); return true; }
     return false;
   } catch (e) { return false; }
+}
+
+// =====================================================
+// MINHAS CANDIDATURAS (candidato)
+// =====================================================
+async function openMinhasCandidaturas() {
+  const list = document.getElementById('candidaturasList');
+  list.innerHTML = '<p style="color:var(--muted);font-size:13px">Carregando...</p>';
+  document.getElementById('candidaturasModal').classList.add('open');
+  try {
+    const r = await sbRest(`candidaturas?select=*,vagas(titulo,empresa_nome,empresa_logo_url,tipo,modalidade,cidade,estado,salario)&user_id=eq.${currentUser.id}&order=criado_em.desc`);
+    const rows = r.ok ? await r.json() : [];
+    if (!rows.length) {
+      list.innerHTML = `<div class="empty" style="border:none;padding:30px 0"><div class="empty-icon">📋</div><div>Você ainda não se candidatou a nenhuma vaga.</div></div>`;
+      return;
+    }
+    list.innerHTML = rows.map(c => {
+      const v = c.vagas || {};
+      const tagTipo = v.tipo ? `<span class="tag tag-tipo-${v.tipo}">${TIPO_LABEL[v.tipo]||v.tipo}</span>` : '';
+      const tagModal = v.modalidade ? `<span class="tag tag-modalidade">${MODALIDADE_ICON[v.modalidade]||''} ${v.modalidade}</span>` : '';
+      return `<div class="job-card" style="cursor:default;margin-bottom:10px">
+        <div class="job-company">${v.empresa_nome || '—'}</div>
+        <div class="job-title">${v.titulo || 'Vaga removida'}</div>
+        <div class="job-tags">${tagTipo}${tagModal}</div>
+        <div class="card-footer">
+          <div class="job-pay">${v.salario || ''}</div>
+          <div class="job-meta">candidatura enviada ${timeAgo(c.criado_em)}</div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    list.innerHTML = '<p style="color:var(--muted);font-size:13px">Erro ao carregar candidaturas.</p>';
+  }
 }
 
 // =====================================================
