@@ -41,6 +41,7 @@
   .logo-sub { font-size:12px; font-weight:400; color:var(--muted); margin-left:2px; }
 
   .header-right { display:flex; align-items:center; gap:10px; }
+  .version-badge { font-size:10px; font-weight:700; color:var(--muted); background:#12233a; border:1px solid var(--border); border-radius:10px; padding:3px 8px; white-space:nowrap; }
   .btn-login { background:transparent; color:var(--accent); border:1px solid var(--accent); padding:7px 16px; font-family:inherit; font-size:13px; font-weight:600; cursor:pointer; border-radius:8px; transition:.15s; }
   .btn-login:hover { background:rgba(234,179,8,.1); }
   .btn-register { background:var(--accent); color:var(--accent-ink); border:none; padding:7px 16px; font-family:inherit; font-size:13px; font-weight:700; cursor:pointer; border-radius:8px; transition:.15s; }
@@ -181,9 +182,12 @@
     <div class="logo-icon">Z</div>
     ZION JOBS
   </a>
-  <div class="header-right" id="headerRight">
-    <button class="btn-login" onclick="openAuth('login')">Entrar</button>
-    <button class="btn-register" onclick="openAuth('register')"><span>Criar conta</span></button>
+  <div style="display:flex;align-items:center;gap:12px">
+    <span class="version-badge" id="versionBadge"></span>
+    <div class="header-right" id="headerRight">
+      <button class="btn-login" onclick="openAuth('login')">Entrar</button>
+      <button class="btn-register" onclick="openAuth('register')"><span>Criar conta</span></button>
+    </div>
   </div>
 </header>
 
@@ -374,6 +378,9 @@
 // =====================================================
 // CONFIG
 // =====================================================
+const ZION_VERSION = 'v2.2';
+document.getElementById('versionBadge').textContent = ZION_VERSION;
+
 const SB_URL = 'https://lnupezzcozlccigqzfsw.supabase.co';
 const SB_KEY = 'sb_publishable_Ea_-ThVjH3hUet-W4Z72PQ_OA8Nn6G9';
 
