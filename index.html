@@ -370,6 +370,14 @@
   </div>
 </div>
 
+<!-- MODAL: VER CANDIDATOS -->
+<div class="modal-overlay" id="verCandidatosModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('verCandidatosModal')">✕</button>
+    <div id="verCandidatosContent">Carregando...</div>
+  </div>
+</div>
+
 <!-- MODAL: EDITAR EMPRESA -->
 <div class="modal-overlay" id="editEmpresaModal">
   <div class="modal" style="max-width:560px">
@@ -756,7 +764,7 @@ async function openPainelEmpresa() {
         <div class="job-title">${v.titulo}</div>
         <div class="job-tags">${v.tipo ? `<span class="tag tag-tipo-${v.tipo}">${TIPO_LABEL[v.tipo]||v.tipo}</span>` : ''}${v.modalidade ? `<span class="tag tag-modalidade">${v.modalidade}</span>` : ''}</div>
         <div class="card-footer">
-          <div class="job-meta">👥 ${candidatosPorVaga[v.id] || 0} candidato(s)</div>
+          <button class="btn-ghost btn btn-sm" style="padding:5px 10px;border-radius:6px;border:1px solid var(--accent);background:transparent;color:var(--accent);cursor:pointer;font-size:11px;font-weight:700" onclick="abrirCandidatos('${v.id}','${(v.titulo||'').replace(/'/g,"\\'")}')">👥 ${candidatosPorVaga[v.id] || 0} candidato(s)</button>
           <div style="display:flex;gap:8px">
             <button class="btn-ghost btn btn-sm" style="padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:11px" onclick="excluirVaga('${v.id}')">Excluir</button>
           </div>
@@ -771,6 +779,31 @@ async function excluirVaga(id) {
   const r = await sbRest(`vagas?id=eq.${id}`, { method: 'DELETE' });
   if (r.ok) openPainelEmpresa();
   else alert('Erro ao excluir a vaga.');
+}
+
+async function abrirCandidatos(vagaId, titulo) {
+  const content = document.getElementById('verCandidatosContent');
+  content.innerHTML = 'Carregando...';
+  document.getElementById('verCandidatosModal').classList.add('open');
+  try {
+    const r = await sbRest(`candidaturas?vaga_id=eq.${vagaId}&select=*&order=criado_em.desc`);
+    const rows = r.ok ? await r.json() : [];
+    const header = `<div style="font-size:20px;font-weight:800;margin-bottom:4px">👥 Candidatos</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:16px">${titulo}</div>`;
+    if (!rows.length) {
+      content.innerHTML = header + `<p style="color:var(--muted);font-size:13px">Ninguém se candidatou ainda.</p>`;
+      return;
+    }
+    content.innerHTML = header + rows.map(c => `
+      <div class="job-card" style="cursor:default;margin-bottom:10px">
+        <div class="job-title">${c.nome || 'Sem nome'}</div>
+        <p style="color:var(--muted);font-size:12px;margin-top:4px">${c.email || ''}${c.whatsapp ? ' · ' + c.whatsapp : ''}</p>
+        <div class="job-meta" style="margin-top:8px">candidatou-se ${timeAgo(c.criado_em)}</div>
+      </div>
+    `).join('');
+  } catch (e) {
+    content.innerHTML = '<p style="color:var(--muted);font-size:13px">Erro ao carregar candidatos.</p>';
+  }
 }
 
 function openEditEmpresa() {
