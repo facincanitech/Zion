@@ -450,7 +450,10 @@ async function doLogin() {
     await loadMinhasCandidaturas();
     closeModal('authModal'); updateAuthUI(); render();
   } catch (e) {
-    showAlert('authAlert','error', /invalid/i.test(e.message) ? 'Email ou senha incorretos.' : e.message);
+    let msg = e.message;
+    if (/invalid/i.test(msg)) msg = 'Email ou senha incorretos.';
+    else if (/not confirmed/i.test(msg)) msg = 'Confirme seu email antes de entrar — veja a caixa de entrada.';
+    showAlert('authAlert','error', msg);
   }
 }
 
