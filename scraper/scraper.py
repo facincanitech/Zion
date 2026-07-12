@@ -400,6 +400,7 @@ def to_vaga(job):
         "cota_pcd": False,
         "cursos_necessarios": [],
         "tags": job.get("tags", []),
+        "pais": job.get("country", "global"),
         "origem": "scraper",
         "fonte": job.get("source", ""),
         "link_externo": job.get("contact", ""),

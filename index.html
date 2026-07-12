@@ -211,14 +211,6 @@
 
 <div class="main">
 
-  <div class="login-banner" id="loginBanner">
-    <div class="login-banner-text">🔒 <strong>Crie uma conta</strong> pra se candidatar às vagas de empresa com 1 clique.</div>
-    <div class="login-banner-btns">
-      <button class="btn-login" onclick="openAuth('login')">Entrar</button>
-      <button class="btn-register" onclick="openAuth('register')">Criar conta grátis</button>
-    </div>
-  </div>
-
   <div class="pending-notice" id="pendingNotice">
     ⏳ Sua empresa está <strong>aguardando verificação</strong>. Após aprovação suas vagas aparecem no feed.
   </div>
@@ -240,6 +232,14 @@
       <span>Só cota PCD</span>
       <span class="pcd-switch" id="pcdSwitch"></span>
     </label>
+  </div>
+
+  <div class="filter-row">
+    <div class="cats">
+      <button class="cat-btn active" onclick="setPais(this,'')">🌍 Todos os países</button>
+      <button class="cat-btn" onclick="setPais(this,'BR')">🇧🇷 Brasil</button>
+      <button class="cat-btn" onclick="setPais(this,'global')">🌐 Global / Remoto</button>
+    </div>
   </div>
 
   <div class="section-label">Vagas disponíveis <span id="countLbl">0</span></div>
@@ -406,7 +406,8 @@ async function sbAuth(path, body) {
 // =====================================================
 // STATE
 // =====================================================
-let vagas = [], tipoAtivo = '', cotaPcdOnly = false;
+let vagas = [], tipoAtivo = '', cotaPcdOnly = false, paisAtivo = '';
+const PAIS_LABEL = { BR: '🇧🇷 Brasil', global: '🌐 Global', US: '🇺🇸 EUA', EU: '🇪🇺 Europa', CA: '🇨🇦 Canadá', CN: '🇨🇳 China', AU: '🇦🇺 Austrália' };
 let currentUser = null; // { access_token, refresh_token, id, email, name, empresa }
 let minhasCandidaturas = new Set();
 
@@ -549,13 +550,12 @@ async function doEmpresaRegister() {
 
 function updateAuthUI() {
   const hr = document.getElementById('headerRight');
-  const banner = document.getElementById('loginBanner');
   const pending = document.getElementById('pendingNotice');
   const postVagaBar = document.getElementById('postVagaBar');
   if (!currentUser) {
     hr.innerHTML = `<button class="btn-login" onclick="openAuth('login')">Entrar</button>
                     <button class="btn-register" onclick="openAuth('register')"><span>Criar conta</span></button>`;
-    banner.style.display = ''; pending.classList.remove('show'); postVagaBar.style.display = 'none';
+    pending.classList.remove('show'); postVagaBar.style.display = 'none';
     return;
   }
   const initials = currentUser.name.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
@@ -566,7 +566,6 @@ function updateAuthUI() {
     : `<span class="user-type-badge">✓ Candidato</span>`;
   hr.innerHTML = `<div class="user-pill"><div class="user-avatar">${initials}</div><span class="user-name">${currentUser.name.split(' ')[0]}</span>${typeLabel}</div>
   <button class="btn-logout" onclick="logout()">Sair</button>`;
-  banner.style.display = 'none';
   pending.classList.toggle('show', isEmpresa && !verificado);
   postVagaBar.style.display = (isEmpresa && verificado) ? '' : 'none';
 }
@@ -627,6 +626,7 @@ async function submitVaga() {
     salario: document.getElementById('pvSalario').value || 'A combinar',
     cota_pcd: document.getElementById('pvCotaPcd').checked,
     cursos_necessarios: (document.getElementById('pvCursos').value || '').split(',').map(s => s.trim()).filter(Boolean),
+    pais: 'BR',
     origem: 'empresa'
   };
   const r = await sbRest('vagas', { method: 'POST', body: JSON.stringify(payload) });
@@ -663,7 +663,14 @@ function render() {
   );
   if (tipoAtivo) list = list.filter(v => v.tipo === tipoAtivo);
   if (cotaPcdOnly) list = list.filter(v => v.cota_pcd);
-  list.sort((a,b) => new Date(b.criado_em) - new Date(a.criado_em));
+  if (paisAtivo) list = list.filter(v => (v.pais || 'global') === paisAtivo);
+  // Brasil sempre primeiro (empresa parceira ou vaga BR raspada), depois por data.
+  list.sort((a,b) => {
+    const brA = (a.pais || 'global') === 'BR' || a.origem === 'empresa' ? 0 : 1;
+    const brB = (b.pais || 'global') === 'BR' || b.origem === 'empresa' ? 0 : 1;
+    if (brA !== brB) return brA - brB;
+    return new Date(b.criado_em) - new Date(a.criado_em);
+  });
 
   document.getElementById('sVagas').textContent = list.length;
   document.getElementById('countLbl').textContent = list.length;
@@ -682,6 +689,7 @@ function render() {
     const tagTipo = v.tipo ? `<span class="tag tag-tipo-${v.tipo}">${TIPO_LABEL[v.tipo]||v.tipo}</span>` : '';
     const tagModal = v.modalidade ? `<span class="tag tag-modalidade">${MODALIDADE_ICON[v.modalidade]||''} ${v.modalidade}</span>` : '';
     const tagFonte = v.origem === 'scraper' ? `<span class="tag tag-fonte">via ${v.fonte}</span>` : '';
+    const tagPais = v.origem === 'scraper' ? `<span class="tag tag-fonte">${PAIS_LABEL[v.pais] || v.pais || '🌐 Global'}</span>` : '';
     return `<div class="job-card" onclick="openDetail('${v.id}')" style="animation-delay:${i*.03}s">
       ${v.cota_pcd ? '<span class="pcd-badge">♿ Cota PCD</span>' : ''}
       <div class="card-top">
@@ -692,7 +700,7 @@ function render() {
       </div>
       <div class="job-title">${v.titulo}</div>
       <div class="job-desc">${v.descricao || ''}</div>
-      <div class="job-tags">${tagTipo}${tagModal}${tagFonte}</div>
+      <div class="job-tags">${tagTipo}${tagModal}${tagPais}${tagFonte}</div>
       <div class="card-footer">
         <div class="job-pay">${v.salario || 'A combinar'}</div>
         <div class="job-meta">${[v.cidade, v.estado].filter(Boolean).join(', ') || timeAgo(v.criado_em)}</div>
@@ -702,9 +710,14 @@ function render() {
 }
 
 function setTipo(btn, t) {
-  document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+  btn.closest('.cats').querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   tipoAtivo = t; render();
+}
+function setPais(btn, p) {
+  btn.closest('.cats').querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  paisAtivo = p; render();
 }
 function toggleCotaPcd(e) {
   cotaPcdOnly = !cotaPcdOnly;

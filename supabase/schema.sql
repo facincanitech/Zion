@@ -35,6 +35,7 @@ create table if not exists vagas (
   setor text,
   cidade text,
   estado text,
+  pais text default 'BR',   -- 'BR' | 'global' | 'US' | 'EU' | 'CA' | 'CN' | 'AU'
   salario text,
   cota_pcd boolean not null default false,
   cursos_necessarios text[] default '{}',
@@ -121,3 +122,10 @@ create policy "candidatura select" on candidaturas
 create index if not exists idx_vagas_criado_em on vagas (criado_em desc);
 create index if not exists idx_vagas_origem on vagas (origem);
 create index if not exists idx_candidaturas_vaga on candidaturas (vaga_id);
+
+-- ─────────────────────────────────────────
+-- MIGRAÇÃO — rodar de novo se a tabela `vagas` já existia sem a coluna `pais`
+-- (idempotente: pode rodar o arquivo inteiro de novo sem problema)
+-- ─────────────────────────────────────────
+alter table vagas add column if not exists pais text default 'BR';
+create index if not exists idx_vagas_pais on vagas (pais);
