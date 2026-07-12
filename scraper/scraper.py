@@ -512,12 +512,13 @@ def publish_vagas_supabase(vagas_raspadas):
 # ─────────────────────────────────────────
 # SELEÇÃO BALANCEADA — cota mínima de BR + round-robin entre fontes
 # ─────────────────────────────────────────
-def balanced_select(jobs, max_jobs, br_quota_ratio=0.35):
-    """jobs já vem ordenado por score desc. Garante uma cota de vagas BR e
-    intercala entre as fontes restantes pra nenhuma dominar o feed."""
+def balanced_select(jobs, max_jobs):
+    """jobs já vem ordenado por score desc. Prioriza TODAS as vagas BR
+    disponíveis (sem teto artificial) e intercala o resto entre as fontes
+    restantes pra nenhuma dominar o feed."""
     br_jobs = [j for j in jobs if j.get("country") == "BR"]
-    br_quota = min(len(br_jobs), max(1, int(max_jobs * br_quota_ratio)))
-    selected = br_jobs[:br_quota]
+    print(f"🇧🇷 Vagas BR disponíveis após filtro de score: {len(br_jobs)}")
+    selected = br_jobs[:max_jobs]
     selected_ids = {j["id"] for j in selected}
 
     by_source = {}

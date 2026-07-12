@@ -234,7 +234,7 @@
     <div class="cats">
       <button class="cat-btn active" onclick="setPais(this,'')">🌍 Todos</button>
       <button class="cat-btn" onclick="setPais(this,'BR')">🇧🇷 Brasil</button>
-      <button class="cat-btn" onclick="setPais(this,'global')">🌐 Global</button>
+      <button class="cat-btn" onclick="setPais(this,'global')">🌐 Fora do Brasil</button>
     </div>
     <label class="pcd-toggle" onclick="toggleCotaPcd(event)">
       <span>Só cota PCD</span>
@@ -683,7 +683,8 @@ function render() {
   );
   if (tipoAtivo) list = list.filter(v => v.tipo === tipoAtivo);
   if (cotaPcdOnly) list = list.filter(v => v.cota_pcd);
-  if (paisAtivo) list = list.filter(v => (v.pais || 'global') === paisAtivo);
+  if (paisAtivo === 'BR') list = list.filter(v => (v.pais || 'global') === 'BR');
+  else if (paisAtivo === 'global') list = list.filter(v => (v.pais || 'global') !== 'BR');
   // Brasil sempre primeiro (empresa parceira ou vaga BR raspada); dentro do
   // Brasil, vagas em português antes das em inglês; depois por data.
   list.sort((a,b) => {
