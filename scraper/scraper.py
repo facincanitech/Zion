@@ -170,7 +170,7 @@ def fetch_remoteok():
                 continue
             tags     = item.get("tags") or []
             title    = item.get("position", "")
-            desc     = strip_html(item.get("description", ""))[:600]
+            desc     = strip_html(item.get("description", ""))[:3000]
             sal_min  = item.get("salary_min") or 0
             sal_max  = item.get("salary_max") or 0
             pay_txt  = f"${sal_min:,}–${sal_max:,}/ano" if sal_min and sal_max else "A combinar"
@@ -203,7 +203,7 @@ def fetch_remotive():
         for item in data.get("jobs", []):
             tags     = item.get("tags") or []
             title    = item.get("title", "")
-            desc     = strip_html(item.get("description", ""))[:600]
+            desc     = strip_html(item.get("description", ""))[:3000]
             salary   = item.get("salary", "") or ""
             date_val = item.get("publication_date", "")
             location = item.get("candidate_required_location", "Global") or "Global"
@@ -264,7 +264,7 @@ def fetch_jooble():
                     if jid in seen: continue
                     seen.add(jid)
                     title    = item.get("title", "")
-                    desc     = strip_html(item.get("snippet", ""))[:600]
+                    desc     = strip_html(item.get("snippet", ""))[:3000]
                     company  = item.get("company", "—")
                     date_val = item.get("updated", "")
                     salary   = item.get("salary", "") or ""
@@ -309,7 +309,7 @@ def fetch_adzuna():
                 data = fetch_json(url)
                 for item in data.get("results", []):
                     title    = item.get("title", "")
-                    desc     = strip_html(item.get("description", ""))[:600]
+                    desc     = strip_html(item.get("description", ""))[:3000]
                     company  = item.get("company", {}).get("display_name", "—")
                     date_val = item.get("created", "")
                     sal_min  = item.get("salary_min", 0) or 0
@@ -359,7 +359,7 @@ def fetch_freelancer():
                     if pid in seen: continue
                     seen.add(pid)
                     title     = item.get("title", "")
-                    desc      = strip_html(item.get("preview_description", ""))[:600]
+                    desc      = strip_html(item.get("preview_description", ""))[:3000]
                     budget    = item.get("budget", {}) or {}
                     pay_min   = budget.get("minimum", 0) or 0
                     pay_max   = budget.get("maximum", 0) or 0

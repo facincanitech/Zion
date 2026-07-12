@@ -749,7 +749,7 @@ function openDetail(id) {
 
   const btn = document.getElementById('applyBtn');
   if (v.origem === 'scraper') {
-    btn.textContent = 'Ver vaga original →';
+    btn.textContent = 'Candidatar no site original →';
     btn.disabled = false;
     btn.onclick = () => window.open(v.link_externo, '_blank');
   } else if (!currentUser) {
