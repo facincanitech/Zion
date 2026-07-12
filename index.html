@@ -232,8 +232,7 @@
       <button class="cat-btn" onclick="setTipo(this,'Mentoria')">Mentoria</button>
     </div>
     <div class="cats">
-      <button class="cat-btn active" onclick="setPais(this,'')">🌍 Todos</button>
-      <button class="cat-btn" onclick="setPais(this,'BR')">🇧🇷 Brasil</button>
+      <button class="cat-btn active" onclick="setPais(this,'BR')">🇧🇷 Brasil</button>
       <button class="cat-btn" onclick="setPais(this,'global')">🌐 Fora do Brasil</button>
     </div>
     <label class="pcd-toggle" onclick="toggleCotaPcd(event)">
@@ -426,7 +425,7 @@ async function sbAuth(path, body) {
 // =====================================================
 // STATE
 // =====================================================
-let vagas = [], tipoAtivo = '', cotaPcdOnly = false, paisAtivo = '';
+let vagas = [], tipoAtivo = '', cotaPcdOnly = false, paisAtivo = 'BR';
 const PAIS_LABEL = { BR: '🇧🇷 Brasil', global: '🌐 Global', US: '🇺🇸 EUA', EU: '🇪🇺 Europa', CA: '🇨🇦 Canadá', CN: '🇨🇳 China', AU: '🇦🇺 Austrália' };
 let currentUser = null; // { access_token, refresh_token, id, email, name, empresa }
 let minhasCandidaturas = new Set();
