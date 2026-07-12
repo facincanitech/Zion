@@ -661,11 +661,17 @@ function render() {
   if (tipoAtivo) list = list.filter(v => v.tipo === tipoAtivo);
   if (cotaPcdOnly) list = list.filter(v => v.cota_pcd);
   if (paisAtivo) list = list.filter(v => (v.pais || 'global') === paisAtivo);
-  // Brasil sempre primeiro (empresa parceira ou vaga BR raspada), depois por data.
+  // Brasil sempre primeiro (empresa parceira ou vaga BR raspada); dentro do
+  // Brasil, vagas em português antes das em inglês; depois por data.
   list.sort((a,b) => {
     const brA = (a.pais || 'global') === 'BR' || a.origem === 'empresa' ? 0 : 1;
     const brB = (b.pais || 'global') === 'BR' || b.origem === 'empresa' ? 0 : 1;
     if (brA !== brB) return brA - brB;
+    if (brA === 0) {
+      const langA = (a.idioma || 'pt') === 'pt' ? 0 : 1;
+      const langB = (b.idioma || 'pt') === 'pt' ? 0 : 1;
+      if (langA !== langB) return langA - langB;
+    }
     return new Date(b.criado_em) - new Date(a.criado_em);
   });
 

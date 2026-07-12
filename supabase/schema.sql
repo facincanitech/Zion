@@ -129,3 +129,5 @@ create index if not exists idx_candidaturas_vaga on candidaturas (vaga_id);
 -- ─────────────────────────────────────────
 alter table vagas add column if not exists pais text default 'BR';
 create index if not exists idx_vagas_pais on vagas (pais);
+
+alter table vagas add column if not exists idioma text default 'pt';  -- 'pt' | 'en'

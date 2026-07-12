@@ -88,6 +88,18 @@ def detect_country(location=''):
         if kw in loc: return 'AU'
     return 'global'
 
+_PT_WORDS = [
+    'você', 'não', 'para', 'com', 'uma', 'projeto', 'vaga', 'preciso', 'precisa',
+    'desenvolv', 'profissional', 'experiência', 'trabalh', 'empresa', 'contrat',
+    'buscamos', 'procuro', 'procuramos', 'atuação', 'necessári', 'conhecimento'
+]
+
+def detect_lang(text):
+    t = (text or '').lower()
+    hints = sum(t.count(w) for w in _PT_WORDS)
+    accented = sum(t.count(c) for c in 'ãõáéíóúâêôç')
+    return 'pt' if (hints >= 2 or accented >= 3) else 'en'
+
 def _parse_date(date_val):
     try:
         if isinstance(date_val, (int, float)):
@@ -401,6 +413,7 @@ def to_vaga(job):
         "cursos_necessarios": [],
         "tags": job.get("tags", []),
         "pais": job.get("country", "global"),
+        "idioma": detect_lang(job["title"] + " " + job["desc"]),
         "origem": "scraper",
         "fonte": job.get("source", ""),
         "link_externo": job.get("contact", ""),
