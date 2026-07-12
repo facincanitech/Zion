@@ -246,20 +246,33 @@
   <div class="job-grid" id="grid"></div>
 </div>
 
-<!-- MODAL: DETALHE -->
+<!-- MODAL: RESUMO -->
 <div class="modal-overlay" id="detailModal">
   <div class="modal">
     <button class="modal-close" onclick="closeModal('detailModal')">✕</button>
     <div id="mBadges"></div>
     <div class="modal-title" id="mTitle"></div>
     <div class="modal-co" id="mCo"></div>
-    <div class="modal-sec"><div class="modal-sec-title">Descrição</div><p id="mDesc"></p></div>
-    <div class="modal-sec" id="mCursosWrap" style="display:none"><div class="modal-sec-title">Cursos necessários</div><p id="mCursos"></p></div>
+    <div class="modal-sec"><div class="modal-sec-title">Resumo</div><p id="mDescResumo"></p></div>
     <div class="modal-sec"><div class="modal-sec-title">Remuneração</div><div class="modal-pay-num" id="mPay"></div></div>
+    <button class="modal-apply" onclick="openFullDetail()">Saiba mais →</button>
+  </div>
+</div>
+
+<!-- MODAL: DETALHE COMPLETO -->
+<div class="modal-overlay" id="fullDetailModal">
+  <div class="modal" style="max-width:640px">
+    <button class="modal-close" onclick="closeModal('fullDetailModal')">✕</button>
+    <div id="mBadgesFull"></div>
+    <div class="modal-title" id="mTitleFull"></div>
+    <div class="modal-co" id="mCoFull"></div>
+    <div class="modal-sec"><div class="modal-sec-title">Descrição completa</div><p id="mDescFull"></p></div>
+    <div class="modal-sec" id="mCursosWrap" style="display:none"><div class="modal-sec-title">Cursos necessários</div><p id="mCursos"></p></div>
     <div class="modal-sec" id="mExtraWrap" style="display:none">
       <div class="modal-sec-title">Detalhes da vaga original</div>
       <div id="mExtra" style="display:flex;flex-wrap:wrap;gap:8px"></div>
     </div>
+    <div class="modal-sec"><div class="modal-sec-title">Remuneração</div><div class="modal-pay-num" id="mPayFull"></div></div>
     <button class="modal-apply" id="applyBtn"></button>
   </div>
 </div>
@@ -741,17 +754,40 @@ function toggleCotaPcd(e) {
 // =====================================================
 // DETAIL MODAL
 // =====================================================
-function openDetail(id) {
-  const v = vagas.find(x => x.id === id);
-  if (!v) return;
+function badgesHtml(v) {
   const tagTipo = v.tipo ? `<span class="tag tag-tipo-${v.tipo}">${TIPO_LABEL[v.tipo]||v.tipo}</span>` : '';
   const tagModal = v.modalidade ? `<span class="tag tag-modalidade">${MODALIDADE_ICON[v.modalidade]||''} ${v.modalidade}</span>` : '';
   const tagPcd = v.cota_pcd ? `<span class="tag" style="background:rgba(234,179,8,.12);color:var(--accent);border-color:rgba(234,179,8,.35)">♿ Cota PCD</span>` : '';
-  document.getElementById('mBadges').innerHTML = `${tagTipo}${tagModal}${tagPcd}`;
+  return `${tagTipo}${tagModal}${tagPcd}`;
+}
+
+let currentVagaDetail = null;
+
+// Modal de resumo — abre ao clicar no card, mostra só o essencial
+function openDetail(id) {
+  const v = vagas.find(x => x.id === id);
+  if (!v) return;
+  currentVagaDetail = v;
+  document.getElementById('mBadges').innerHTML = badgesHtml(v);
   document.getElementById('mTitle').textContent = v.titulo;
   document.getElementById('mCo').textContent = `${v.empresa_nome || '—'} · ${[v.cidade, v.estado].filter(Boolean).join(', ') || 'Local não informado'} · publicada ${timeAgo(v.criado_em)}`;
-  document.getElementById('mDesc').textContent = v.descricao || 'Sem descrição.';
+  const desc = v.descricao || 'Sem descrição.';
+  document.getElementById('mDescResumo').textContent = desc.length > 220 ? desc.slice(0, 220).trim() + '…' : desc;
   document.getElementById('mPay').textContent = v.salario || 'A combinar';
+  document.getElementById('detailModal').classList.add('open');
+}
+
+// Modal de detalhe completo — aberto pelo botão "Saiba mais" do resumo
+function openFullDetail() {
+  const v = currentVagaDetail;
+  if (!v) return;
+  closeModal('detailModal');
+
+  document.getElementById('mBadgesFull').innerHTML = badgesHtml(v);
+  document.getElementById('mTitleFull').textContent = v.titulo;
+  document.getElementById('mCoFull').textContent = `${v.empresa_nome || '—'} · ${[v.cidade, v.estado].filter(Boolean).join(', ') || 'Local não informado'} · publicada ${timeAgo(v.criado_em)}`;
+  document.getElementById('mDescFull').textContent = v.descricao || 'Sem descrição.';
+  document.getElementById('mPayFull').textContent = v.salario || 'A combinar';
 
   const cursosWrap = document.getElementById('mCursosWrap');
   if (v.cursos_necessarios && v.cursos_necessarios.length) {
@@ -784,7 +820,7 @@ function openDetail(id) {
   } else if (!currentUser) {
     btn.textContent = 'Entrar para se candidatar';
     btn.disabled = false;
-    btn.onclick = () => { closeModal('detailModal'); openAuth('login'); };
+    btn.onclick = () => { closeModal('fullDetailModal'); openAuth('login'); };
   } else if (jaCandidatou(v.id)) {
     btn.textContent = '✓ Candidatura enviada';
     btn.disabled = true;
@@ -794,11 +830,11 @@ function openDetail(id) {
     btn.onclick = async () => {
       btn.disabled = true; btn.textContent = 'Enviando...';
       const ok = await candidatar(v.id);
-      if (ok) openDetail(v.id);
+      if (ok) openFullDetail();
       else { btn.disabled = false; btn.textContent = 'Candidatar-se →'; alert('Erro ao enviar candidatura, tente de novo.'); }
     };
   }
-  document.getElementById('detailModal').classList.add('open');
+  document.getElementById('fullDetailModal').classList.add('open');
 }
 
 // =====================================================
