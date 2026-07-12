@@ -139,6 +139,7 @@ def score(job):
     if job.get("payNum", 0) > 0: pts += 1
     if job.get("urgency") == "hot": pts += 2
     elif job.get("urgency") == "new": pts += 1
+    if job.get("country") == "BR": pts += 2  # prioriza vagas do Brasil no feed
     return max(0, min(10, pts))
 
 # ─────────────────────────────────────────
