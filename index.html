@@ -252,6 +252,10 @@
     <div class="modal-sec"><div class="modal-sec-title">Descrição</div><p id="mDesc"></p></div>
     <div class="modal-sec" id="mCursosWrap" style="display:none"><div class="modal-sec-title">Cursos necessários</div><p id="mCursos"></p></div>
     <div class="modal-sec"><div class="modal-sec-title">Remuneração</div><div class="modal-pay-num" id="mPay"></div></div>
+    <div class="modal-sec" id="mExtraWrap" style="display:none">
+      <div class="modal-sec-title">Detalhes da vaga original</div>
+      <div id="mExtra" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+    </div>
     <button class="modal-apply" id="applyBtn"></button>
   </div>
 </div>
@@ -746,6 +750,24 @@ function openDetail(id) {
   if (v.cursos_necessarios && v.cursos_necessarios.length) {
     cursosWrap.style.display = ''; document.getElementById('mCursos').textContent = v.cursos_necessarios.join(', ');
   } else cursosWrap.style.display = 'none';
+
+  // Habilidades/tags da fonte original (quando existir)
+  const extraWrap = document.getElementById('mExtraWrap');
+  const extraEl = document.getElementById('mExtra');
+  const chips = [];
+  if (v.tags && v.tags.length) {
+    chips.push(...v.tags.map(t => `<span class="tag tag-modalidade">${t}</span>`));
+  }
+  const EXTRA_LABELS = { propostas: 'Propostas', proposta_media: 'Proposta média', prazo_dias: 'Prazo (dias)', tipo_pagamento: 'Pagamento', status: 'Status' };
+  if (v.extra && typeof v.extra === 'object') {
+    for (const [k, label] of Object.entries(EXTRA_LABELS)) {
+      if (v.extra[k] !== undefined && v.extra[k] !== null) {
+        chips.push(`<span class="tag tag-fonte">${label}: ${v.extra[k]}</span>`);
+      }
+    }
+  }
+  if (chips.length) { extraWrap.style.display = ''; extraEl.innerHTML = chips.join(''); }
+  else extraWrap.style.display = 'none';
 
   const btn = document.getElementById('applyBtn');
   if (v.origem === 'scraper') {

@@ -131,3 +131,5 @@ alter table vagas add column if not exists pais text default 'BR';
 create index if not exists idx_vagas_pais on vagas (pais);
 
 alter table vagas add column if not exists idioma text default 'pt';  -- 'pt' | 'en'
+
+alter table vagas add column if not exists extra jsonb default '{}'::jsonb;  -- metadados extras por fonte (propostas, prazo, tipo de pagamento, status)

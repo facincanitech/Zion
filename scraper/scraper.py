@@ -343,8 +343,8 @@ def fetch_freelancer():
     print("🔍 Freelancer.com...")
     try:
         urls = [
-            "https://www.freelancer.com/api/projects/0.1/projects/active/?limit=50&job_details=true&languages[]=pt",
-            "https://www.freelancer.com/api/projects/0.1/projects/active/?limit=50&job_details=true&languages[]=en",
+            "https://www.freelancer.com/api/projects/0.1/projects/active/?limit=50&job_details=true&project_details=true&full_description=true&languages[]=pt",
+            "https://www.freelancer.com/api/projects/0.1/projects/active/?limit=50&job_details=true&project_details=true&full_description=true&languages[]=en",
         ]
         jobs = []
         seen = set()
@@ -359,7 +359,7 @@ def fetch_freelancer():
                     if pid in seen: continue
                     seen.add(pid)
                     title     = item.get("title", "")
-                    desc      = strip_html(item.get("preview_description", ""))[:3000]
+                    desc      = strip_html(item.get("description") or item.get("preview_description", ""))[:3000]
                     budget    = item.get("budget", {}) or {}
                     pay_min   = budget.get("minimum", 0) or 0
                     pay_max   = budget.get("maximum", 0) or 0
@@ -374,6 +374,7 @@ def fetch_freelancer():
                     tags      = [j.get("name","") for j in jobs_list if j.get("name")][:5]
                     date_val  = item.get("time_submitted", "")
                     country   = item.get("language", "").upper() or "Global"
+                    bid_stats = item.get("bid_stats") or {}
                     jobs.append({
                         "id": job_id("freelancer", pid), "title": title, "company": "Freelancer.com",
                         "category": categorize(tags, title, desc),
@@ -383,7 +384,15 @@ def fetch_freelancer():
                         "location": "Remoto",
                         "country": "BR" if "languages[]=pt" in url else "global",
                         "urgency": urgency(date_val), "criado_em": iso_of(date_val),
-                        "source": "Freelancer"
+                        "source": "Freelancer",
+                        "extra": {
+                            "propostas": bid_stats.get("bid_count"),
+                            "proposta_media": (f"{currency}{bid_stats['bid_avg']:,.0f}" if bid_stats.get("bid_avg") else None),
+                            "prazo_dias": item.get("bidperiod"),
+                            "tipo_pagamento": "Por hora" if item.get("type") == "hourly" else "Preço fixo",
+                            "status": "Aberta" if item.get("frontend_project_status") == "open" else item.get("frontend_project_status"),
+                            "id_projeto": pid
+                        }
                     })
             except Exception as e:
                 print(f"   ⚠ {e}")
@@ -414,6 +423,7 @@ def to_vaga(job):
         "tags": job.get("tags", []),
         "pais": job.get("country", "global"),
         "idioma": detect_lang(job["title"] + " " + job["desc"]),
+        "extra": {k: v for k, v in (job.get("extra") or {}).items() if v is not None},
         "origem": "scraper",
         "fonte": job.get("source", ""),
         "link_externo": job.get("contact", ""),
