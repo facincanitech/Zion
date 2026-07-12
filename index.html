@@ -228,18 +228,15 @@
       <button class="cat-btn" onclick="setTipo(this,'Parceria')">Parceria</button>
       <button class="cat-btn" onclick="setTipo(this,'Mentoria')">Mentoria</button>
     </div>
+    <div class="cats">
+      <button class="cat-btn active" onclick="setPais(this,'')">🌍 Todos</button>
+      <button class="cat-btn" onclick="setPais(this,'BR')">🇧🇷 Brasil</button>
+      <button class="cat-btn" onclick="setPais(this,'global')">🌐 Global</button>
+    </div>
     <label class="pcd-toggle" onclick="toggleCotaPcd(event)">
       <span>Só cota PCD</span>
       <span class="pcd-switch" id="pcdSwitch"></span>
     </label>
-  </div>
-
-  <div class="filter-row">
-    <div class="cats">
-      <button class="cat-btn active" onclick="setPais(this,'')">🌍 Todos os países</button>
-      <button class="cat-btn" onclick="setPais(this,'BR')">🇧🇷 Brasil</button>
-      <button class="cat-btn" onclick="setPais(this,'global')">🌐 Global / Remoto</button>
-    </div>
   </div>
 
   <div class="section-label">Vagas disponíveis <span id="countLbl">0</span></div>
