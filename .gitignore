@@ -1,4 +1,4 @@
-scraper/config.json
-scraper/__pycache__/
+scraper/
+supabase/
 
 AntigoZion/

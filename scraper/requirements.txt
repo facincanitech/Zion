@@ -1,3 +1,0 @@
-# Zion Jobs Scraper — sem dependências externas
-# Usa apenas stdlib do Python 3.8+
-# (urllib, json, re, hashlib, base64, datetime, pathlib, threading, uuid)

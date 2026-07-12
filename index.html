@@ -362,6 +362,45 @@
   </div>
 </div>
 
+<!-- MODAL: PAINEL DA EMPRESA -->
+<div class="modal-overlay" id="painelEmpresaModal">
+  <div class="modal" style="max-width:600px">
+    <button class="modal-close" onclick="closeModal('painelEmpresaModal')">✕</button>
+    <div id="painelEmpresaContent">Carregando...</div>
+  </div>
+</div>
+
+<!-- MODAL: EDITAR EMPRESA -->
+<div class="modal-overlay" id="editEmpresaModal">
+  <div class="modal" style="max-width:560px">
+    <button class="modal-close" onclick="closeModal('editEmpresaModal')">✕</button>
+    <div style="font-size:22px;font-weight:800;margin-bottom:16px">Editar empresa</div>
+    <div class="alert" id="editEmpresaAlert"></div>
+    <div class="form-row"><label class="form-label">Nome</label><input class="form-input" id="eeNome"></div>
+    <div class="form-2">
+      <div class="form-row" style="margin:0"><label class="form-label">Área</label>
+        <select class="form-select" id="eeArea">
+          <option value="tech">Tecnologia</option>
+          <option value="design">Design / Marketing</option>
+          <option value="educacao">Educação</option>
+          <option value="saude">Saúde</option>
+          <option value="varejo">Varejo</option>
+          <option value="admin">Administrativo</option>
+          <option value="outro">Outro</option>
+        </select>
+      </div>
+      <div class="form-row" style="margin:0"><label class="form-label">Telefone</label><input class="form-input" id="eeTel"></div>
+    </div>
+    <div class="form-row"><label class="form-label">Endereço</label><input class="form-input" id="eeEndereco"></div>
+    <div class="form-2">
+      <div class="form-row" style="margin:0"><label class="form-label">Cidade</label><input class="form-input" id="eeCidade"></div>
+      <div class="form-row" style="margin:0"><label class="form-label">Estado</label><input class="form-input" id="eeEstado"></div>
+    </div>
+    <div class="form-row"><label class="form-label">URL do logo</label><input class="form-input" id="eeLogoUrl" placeholder="https://..."></div>
+    <button class="modal-apply" onclick="submitEditEmpresa()">Salvar →</button>
+  </div>
+</div>
+
 <!-- MODAL: MINHAS CANDIDATURAS -->
 <div class="modal-overlay" id="candidaturasModal">
   <div class="modal">
@@ -593,8 +632,9 @@ function updateAuthUI() {
     ? `<span class="user-type-badge empresa">${verificado ? '✓ Empresa' : '⏳ Pendente'}</span>`
     : `<span class="user-type-badge">✓ Candidato</span>`;
   const candidaturasBtn = !isEmpresa ? `<button class="btn-login" onclick="openMinhasCandidaturas()">📋 Candidaturas</button>` : '';
+  const painelBtn = isEmpresa ? `<button class="btn-login" onclick="openPainelEmpresa()">🏢 Painel</button>` : '';
   hr.innerHTML = `<div class="user-pill"><div class="user-avatar">${initials}</div><span class="user-name">${currentUser.name.split(' ')[0]}</span>${typeLabel}</div>
-  ${candidaturasBtn}
+  ${candidaturasBtn}${painelBtn}
   <button class="btn-logout" onclick="logout()">Sair</button>`;
   pending.classList.toggle('show', isEmpresa && !verificado);
   postVagaBar.style.display = (isEmpresa && verificado) ? '' : 'none';
@@ -664,6 +704,108 @@ async function openMinhasCandidaturas() {
   } catch (e) {
     list.innerHTML = '<p style="color:var(--muted);font-size:13px">Erro ao carregar candidaturas.</p>';
   }
+}
+
+// =====================================================
+// PAINEL DA EMPRESA
+// =====================================================
+async function openPainelEmpresa() {
+  const content = document.getElementById('painelEmpresaContent');
+  content.innerHTML = 'Carregando...';
+  document.getElementById('painelEmpresaModal').classList.add('open');
+
+  const e = currentUser.empresa;
+  if (!e) { content.innerHTML = 'Empresa não encontrada.'; return; }
+
+  let vagasList = [];
+  try {
+    const r = await sbRest(`vagas?empresa_id=eq.${e.id}&order=criado_em.desc`);
+    vagasList = r.ok ? await r.json() : [];
+  } catch (err) {}
+
+  let candidatosPorVaga = {};
+  if (vagasList.length) {
+    try {
+      const ids = vagasList.map(v => v.id).join(',');
+      const r = await sbRest(`candidaturas?vaga_id=in.(${ids})&select=vaga_id`);
+      const rows = r.ok ? await r.json() : [];
+      rows.forEach(c => { candidatosPorVaga[c.vaga_id] = (candidatosPorVaga[c.vaga_id] || 0) + 1; });
+    } catch (err) {}
+  }
+
+  const planoLabel = e.plano === 'anual' ? 'Plano Anual' : (e.plano === 'mensal' ? 'Plano Mensal' : '');
+  content.innerHTML = `
+    <div style="display:flex;gap:14px;align-items:center;margin-bottom:16px">
+      ${e.logo_url ? `<img src="${e.logo_url}" style="width:60px;height:60px;border-radius:12px;object-fit:cover;border:1px solid var(--border)">` : `<div class="employer-avatar" style="width:60px;height:60px;font-size:22px">${(e.nome||'—')[0].toUpperCase()}</div>`}
+      <div style="flex:1;min-width:0">
+        <div style="font-size:19px;font-weight:800;color:var(--text)">${e.nome}</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
+          <span class="user-type-badge ${e.verificado ? '' : 'pendente'}">${e.verificado ? '✓ Verificada' : '⏳ Pendente'}</span>
+          ${planoLabel ? `<span class="user-type-badge">${planoLabel}</span>` : ''}
+        </div>
+      </div>
+      <button class="btn-ghost btn" onclick="openEditEmpresa()" style="flex-shrink:0">✎ Editar</button>
+    </div>
+    ${!e.verificado ? `<div class="pending-notice show" style="margin-bottom:16px">⏳ Sua empresa está aguardando verificação. Após aprovada você pode publicar vagas.</div>` : ''}
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <div class="modal-sec-title" style="margin:0">Suas vagas (${vagasList.length})</div>
+      ${e.verificado ? `<button class="btn btn-primary" style="background:var(--accent);color:var(--accent-ink);border:none;padding:6px 12px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer" onclick="closeModal('painelEmpresaModal');openPostVaga()">+ Nova vaga</button>` : ''}
+    </div>
+    ${!vagasList.length ? `<p style="color:var(--muted);font-size:13px">Nenhuma vaga publicada ainda.</p>` : vagasList.map(v => `
+      <div class="job-card" style="cursor:default;margin-bottom:10px">
+        <div class="job-title">${v.titulo}</div>
+        <div class="job-tags">${v.tipo ? `<span class="tag tag-tipo-${v.tipo}">${TIPO_LABEL[v.tipo]||v.tipo}</span>` : ''}${v.modalidade ? `<span class="tag tag-modalidade">${v.modalidade}</span>` : ''}</div>
+        <div class="card-footer">
+          <div class="job-meta">👥 ${candidatosPorVaga[v.id] || 0} candidato(s)</div>
+          <div style="display:flex;gap:8px">
+            <button class="btn-ghost btn btn-sm" style="padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:11px" onclick="excluirVaga('${v.id}')">Excluir</button>
+          </div>
+        </div>
+      </div>
+    `).join('')}
+  `;
+}
+
+async function excluirVaga(id) {
+  if (!confirm('Excluir essa vaga? Essa ação não pode ser desfeita.')) return;
+  const r = await sbRest(`vagas?id=eq.${id}`, { method: 'DELETE' });
+  if (r.ok) openPainelEmpresa();
+  else alert('Erro ao excluir a vaga.');
+}
+
+function openEditEmpresa() {
+  const e = currentUser.empresa;
+  if (!e) return;
+  document.getElementById('eeNome').value = e.nome || '';
+  document.getElementById('eeArea').value = e.area || 'tech';
+  document.getElementById('eeTel').value = e.tel || '';
+  document.getElementById('eeEndereco').value = e.endereco || '';
+  document.getElementById('eeCidade').value = e.cidade || '';
+  document.getElementById('eeEstado').value = e.estado || '';
+  document.getElementById('eeLogoUrl').value = e.logo_url || '';
+  document.getElementById('editEmpresaAlert').className = 'alert';
+  document.getElementById('editEmpresaModal').classList.add('open');
+}
+
+async function submitEditEmpresa() {
+  const payload = {
+    nome: document.getElementById('eeNome').value.trim(),
+    area: document.getElementById('eeArea').value,
+    tel: document.getElementById('eeTel').value.trim(),
+    endereco: document.getElementById('eeEndereco').value.trim(),
+    cidade: document.getElementById('eeCidade').value.trim(),
+    estado: document.getElementById('eeEstado').value.trim(),
+    logo_url: document.getElementById('eeLogoUrl').value.trim()
+  };
+  const r = await sbRest(`empresas?id=eq.${currentUser.empresa.id}`, {
+    method: 'PATCH', headers: { 'Prefer': 'return=representation' }, body: JSON.stringify(payload)
+  });
+  if (!r.ok) return showAlert('editEmpresaAlert', 'error', 'Erro ao salvar. Tente de novo.');
+  const rows = await r.json();
+  currentUser.empresa = rows[0];
+  saveSession(currentUser);
+  closeModal('editEmpresaModal');
+  openPainelEmpresa();
 }
 
 // =====================================================
